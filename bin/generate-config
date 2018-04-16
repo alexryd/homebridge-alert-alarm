@@ -119,6 +119,7 @@ const outputConfig = settings => {
   const config = {
     platform: "AlertAlarm",
     name: "Alert Alarm",
+    refreshInterval: 10 * 60 * 1000,
     systemId: settings.systemId,
     clientId: settings.clientId,
     privateKey: settings.privateKey,

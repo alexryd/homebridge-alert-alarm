@@ -30,9 +30,9 @@ module.exports = function(homebridge) {
     getServices() {
       const service = new Service.TemperatureSensor(this.name)
 
-      service.getCharacteristic(Characteristic.CurrentTemperature)
+      this.platform.characteristics['temperature-' + this.id] = service
+        .getCharacteristic(Characteristic.CurrentTemperature)
         .setProps({ minValue: -100 })
-        .setValue(21)
 
       return [service]
     }
@@ -43,6 +43,8 @@ module.exports = function(homebridge) {
       this.log = log
       this.config = config
       this.api = new AlertAlarmApi(config)
+      this.lastSeenEventId = 0
+      this.characteristics = {}
     }
 
     accessories(callback) {
@@ -56,11 +58,45 @@ module.exports = function(homebridge) {
             }
           }
 
+          this.loadEventLog()
+
           callback(accessories)
         })
         .catch(err => {
           this.log('An error occurred while loading devices')
           throw err
+        })
+    }
+
+    loadEventLog() {
+      this.api.get('/log/recent', { count: 1000, since_id: this.lastSeenEventId })
+        .then(res => {
+          const characteristics = Object.assign({}, this.characteristics)
+
+          for (let event of res.body.data) {
+            if (event.id > this.lastSeenEventId) {
+              this.lastSeenEventId = event.id
+            }
+
+            if (event.log_type === 'temperature') {
+              const key = 'temperature-' + event.data.radio_code
+              const characteristic = characteristics[key]
+
+              if (characteristic) {
+                characteristic.setValue(event.data.degrees_celsius)
+                delete characteristics[key]
+              }
+            }
+          }
+        })
+        .catch(err => {
+          this.log('Failed to load the event log', err)
+        })
+        .then(() => {
+          setTimeout(
+            this.loadEventLog.bind(this),
+            this.config.refreshInterval || 10 * 60 * 1000
+          )
         })
     }
   }

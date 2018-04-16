@@ -13,7 +13,7 @@ module.exports = function(homebridge) {
     }
 
     identify(callback) {
-      this.log('AlertAlarmAccessory identified')
+      this.platform.log('AlertAlarmAccessory identified')
       callback()
     }
   }

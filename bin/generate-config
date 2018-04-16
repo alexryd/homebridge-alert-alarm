@@ -1,12 +1,11 @@
 #!/usr/bin/env node
 
+const AlertAlarmApi = require('../api')
 const colors = require('colors/safe')
 const NodeRSA = require('node-rsa')
 const prompt = require('prompt')
-const superagent = require('superagent')
 
-const BASE_URL = 'https://api.alertalarm.se'
-const USER_AGENT = 'AlertAlarm/2.46.4-release(5) (iOS 11.3 15E216, iPhone9,3)'
+const api = new AlertAlarmApi()
 
 const promptForSystemIdAndPhoneNumber = settings => {
   return new Promise((resolve, reject) => {
@@ -44,8 +43,7 @@ const promptForSystemIdAndPhoneNumber = settings => {
 const authenticate = settings => {
   console.log('Sending authenticate request...')
 
-  return superagent.post(BASE_URL + '/system/auth')
-    .set('User-Agent', USER_AGENT)
+  return api.post('/system/auth')
     .type('form')
     .send({
       system_id: settings.systemId,
@@ -94,8 +92,7 @@ const verify = settings => {
 
   console.log('Verifying code...')
 
-  return superagent.post(BASE_URL + '/system/verify')
-    .set('User-Agent', USER_AGENT)
+  return api.post('/system/verify')
     .type('form')
     .send({
       system_id: settings.systemId,

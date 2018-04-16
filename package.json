@@ -3,6 +3,9 @@
   "version": "0.0.1",
   "description": "Homebridge plugin for Alert Alarm",
   "main": "index.js",
+  "bin": {
+    "homebridge-alert-alarm-config": "./bin/generate-config"
+  },
   "keywords": [
     "homebridge",
     "homebridge-plugin"
@@ -14,5 +17,9 @@
   "author": "Alexander Rydén",
   "license": "ISC",
   "dependencies": {
+    "colors": "^1.2.1",
+    "node-rsa": "^0.4.2",
+    "prompt": "^1.0.0",
+    "superagent": "^3.8.2"
   }
 }

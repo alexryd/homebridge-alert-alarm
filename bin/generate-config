@@ -1,0 +1,146 @@
+#!/usr/bin/env node
+
+const colors = require('colors/safe')
+const NodeRSA = require('node-rsa')
+const prompt = require('prompt')
+const superagent = require('superagent')
+
+const BASE_URL = 'https://api.alertalarm.se'
+const USER_AGENT = 'AlertAlarm/2.46.4-release(5) (iOS 11.3 15E216, iPhone9,3)'
+
+const promptForSystemIdAndPhoneNumber = settings => {
+  return new Promise((resolve, reject) => {
+    prompt.get(
+      {
+        properties: {
+          systemId: {
+            description: 'System ID',
+            pattern: /^[0-9]+$/,
+            message: 'System ID must be a number',
+            required: true,
+          },
+          phoneNumber: {
+            description: 'Phone number',
+            pattern: /^[0-9]+$/,
+            message: 'Phone number must be a number',
+            required: true,
+          },
+        }
+      },
+      (err, res) => {
+        if (err) {
+          reject(err)
+        } else {
+          settings.systemId = res.systemId
+          settings.phoneNumber = res.phoneNumber
+
+          resolve(settings)
+        }
+      }
+    )
+  })
+}
+
+const authenticate = settings => {
+  console.log('Sending authenticate request...')
+
+  return superagent.post(BASE_URL + '/system/auth')
+    .set('User-Agent', USER_AGENT)
+    .type('form')
+    .send({
+      system_id: settings.systemId,
+      phone_number: settings.phoneNumber,
+      language: 'sv',
+    })
+    .then(res => {
+      console.log(colors.green('Authentication succeeded'))
+      return settings
+    })
+}
+
+const promptForCode = settings => {
+  return new Promise((resolve, reject) => {
+    prompt.get(
+      {
+        properties: {
+          code: {
+            description: 'Code',
+            pattern: /^[0-9]+$/,
+            message: 'Code must be a number',
+            required: true,
+          }
+        }
+      },
+      (err, res) => {
+        if (err) {
+          reject(err)
+        } else {
+          settings.code = res.code
+
+          resolve(settings)
+        }
+      }
+    )
+  })
+}
+
+const verify = settings => {
+  console.log('Generating key...')
+
+  const key = new NodeRSA().generateKeyPair()
+  key.setOptions({ encryptionScheme: 'pkcs1' })
+
+  const encodedKey = Buffer.from(key.exportKey('pkcs8-public')).toString('base64')
+
+  console.log('Verifying code...')
+
+  return superagent.post(BASE_URL + '/system/verify')
+    .set('User-Agent', USER_AGENT)
+    .type('form')
+    .send({
+      system_id: settings.systemId,
+      phone_number: settings.phoneNumber,
+      code: settings.code,
+      key: encodedKey,
+    })
+    .then(res => {
+      console.log(colors.green('Code successfully verified'))
+
+      const data = JSON.parse(key.decrypt(res.body.data).toString('ascii'))
+
+      settings.clientId = data.clientId
+      settings.userId = data.userId
+      settings.isMaster = data.isMaster
+      settings.publicKey = key.exportKey('public')
+      settings.privateKey = key.exportKey('private')
+
+      return settings
+    })
+}
+
+const outputConfig = settings => {
+  const config = {
+    platform: "AlertAlarm",
+    name: "Alert Alarm",
+    systemId: settings.systemId,
+    clientId: settings.clientId,
+    privateKey: settings.privateKey,
+  }
+
+  console.log('')
+  console.log(colors.yellow('Copy and paste the JSON data below into your Homebridge config file:'))
+  console.log('')
+  console.log(JSON.stringify(config, null, 2))
+}
+
+prompt.start()
+
+promptForSystemIdAndPhoneNumber({})
+  .then(authenticate)
+  .then(promptForCode)
+  .then(verify)
+  .then(outputConfig)
+  .catch(err => {
+    console.error(colors.red('An error occurred'), err)
+    process.exit(1)
+  })

@@ -8,13 +8,48 @@ module.exports = function(homebridge) {
     constructor(platform, device) {
       this.platform = platform
       this.device = device
-      this.id = device.radio_code
+      this.id = device.id || device.radio_code
       this.name = device.name || null
     }
 
     identify(callback) {
       this.platform.log('AlertAlarmAccessory identified')
       callback()
+    }
+  }
+
+  class AlertAlarmSecuritySystem extends AlertAlarmAccessory {
+    constructor(platform, device) {
+      super(platform, device)
+
+      if (!this.name) {
+        this.name = this.platform.config.name + ' Security System'
+      }
+    }
+
+    getServices() {
+      const service = new Service.SecuritySystem(this.name)
+      const SSCS = Characteristic.SecuritySystemCurrentState
+      const SSTS = Characteristic.SecuritySystemTargetState
+
+      this.platform.characteristics['security-system-current-state'] = service
+        .getCharacteristic(SSCS)
+        .setProps({
+          validValues: [SSCS.STAY_ARM, SSCS.AWAY_ARM, SSCS.DISARMED, SSCS.ALARM_TRIGGERED]
+        })
+
+      this.platform.characteristics['security-system-target-state'] = service
+        .getCharacteristic(SSTS)
+        .setProps({
+          validValues: [SSTS.STAY_ARM, SSTS.AWAY_ARM, SSTS.DISARM]
+        })
+        .on('set', (newState, callback) => {
+          // TODO: implement this request
+          service.getCharacteristic(SSCS).setValue(newState)
+          callback()
+        })
+
+      return [service]
     }
   }
 
@@ -48,7 +83,9 @@ module.exports = function(homebridge) {
     }
 
     accessories(callback) {
-      const accessories = []
+      const accessories = [
+        new AlertAlarmSecuritySystem(this, { id: 0 })
+      ]
 
       this.api.get('/system/devices', { refresh: 'false' })
         .then(res => {
@@ -71,26 +108,10 @@ module.exports = function(homebridge) {
     loadEventLog() {
       this.api.get('/log/recent', { count: 1000, since_id: this.lastSeenEventId })
         .then(res => {
-          const characteristics = Object.assign({}, this.characteristics)
-
-          for (let event of res.body.data) {
-            if (event.id > this.lastSeenEventId) {
-              this.lastSeenEventId = event.id
-            }
-
-            if (event.log_type === 'temperature') {
-              const key = 'temperature-' + event.data.radio_code
-              const characteristic = characteristics[key]
-
-              if (characteristic) {
-                characteristic.setValue(event.data.degrees_celsius)
-                delete characteristics[key]
-              }
-            }
-          }
+          this.updateCharacteristics(res.body.data)
         })
         .catch(err => {
-          this.log('Failed to load the event log', err)
+          this.log('Failed to load the event log:', err)
         })
         .then(() => {
           setTimeout(
@@ -98,6 +119,39 @@ module.exports = function(homebridge) {
             this.config.refreshInterval || 10 * 60 * 1000
           )
         })
+    }
+
+    updateCharacteristics(events) {
+      const characteristics = Object.assign({}, this.characteristics)
+
+      const setValue = (key, value) => {
+        const characteristic = characteristics[key]
+
+        if (characteristic) {
+          characteristic.setValue(value)
+          delete characteristics[key]
+        }
+      }
+
+      for (let event of events) {
+        if (event.id > this.lastSeenEventId) {
+          this.lastSeenEventId = event.id
+        }
+
+        if (event.log_type === 'activation') {
+          const SSCS = Characteristic.SecuritySystemCurrentState
+          const SSTS = Characteristic.SecuritySystemTargetState
+          const state = event.data.active_group_id
+
+          setValue('security-system-target-state', state >= 0 ? SSTS.AWAY_ARM : SSTS.DISARM)
+
+          if (event.data.activation_progress === 0) {
+            setValue('security-system-current-state', state >= 0 ? SSCS.AWAY_ARM : SSCS.DISARMED)
+          }
+        } else if (event.log_type === 'temperature') {
+          setValue('temperature-' + event.data.radio_code, event.data.degrees_celsius)
+        }
+      }
     }
   }
 

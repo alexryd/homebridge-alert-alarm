@@ -128,7 +128,9 @@ module.exports = function(homebridge) {
         const characteristic = characteristics[key]
 
         if (characteristic) {
-          characteristic.setValue(value)
+          if (value !== characteristic.value) {
+            characteristic.setValue(value)
+          }
           delete characteristics[key]
         }
       }

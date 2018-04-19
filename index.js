@@ -1,4 +1,5 @@
 const AlertAlarmApi = require('./api')
+const packageVersion = require('./package.json').version
 
 module.exports = function(homebridge) {
   const Service = homebridge.hap.Service
@@ -9,26 +10,45 @@ module.exports = function(homebridge) {
       this.platform = platform
       this.device = device
       this.id = device.id || device.radio_code
-      this.name = device.name || null
+      this.uuid_base = this.type + ':' + this.id
+    }
+
+    get name() {
+      return this.device.name || this.type
+    }
+
+    get type() {
+      return 'Accessory'
     }
 
     identify(callback) {
-      this.platform.log('AlertAlarmAccessory identified')
+      this.platform.log(this.type, this.id, 'identified')
       callback()
+    }
+
+    getServices() {
+      let model = this.type
+      if (this.device.type) {
+        model += ' (' + this.device.type + ')'
+      }
+
+      const accessoryInformation = new Service.AccessoryInformation()
+        .setCharacteristic(Characteristic.Manufacturer, 'Alert Alarm')
+        .setCharacteristic(Characteristic.Model, model)
+        .setCharacteristic(Characteristic.SerialNumber, String(this.id))
+        .setCharacteristic(Characteristic.FirmwareRevision, packageVersion)
+
+      return [accessoryInformation]
     }
   }
 
   class AlertAlarmSecuritySystem extends AlertAlarmAccessory {
-    constructor(platform, device) {
-      super(platform, device)
-
-      if (!this.name) {
-        this.name = this.platform.config.name + ' Security System'
-      }
+    get type() {
+      return 'Security System'
     }
 
     getServices() {
-      const service = new Service.SecuritySystem(this.name)
+      const service = new Service.SecuritySystem(this.type)
       const SSCS = Characteristic.SecuritySystemCurrentState
       const SSTS = Characteristic.SecuritySystemTargetState
 
@@ -49,27 +69,23 @@ module.exports = function(homebridge) {
           callback()
         })
 
-      return [service]
+      return [service].concat(super.getServices())
     }
   }
 
   class AlertAlarmThermometer extends AlertAlarmAccessory {
-    constructor(platform, device) {
-      super(platform, device)
-
-      if (!this.name) {
-        this.name = this.platform.config.name + ' Thermometer ' + this.id
-      }
+    get type() {
+      return 'Thermometer'
     }
 
     getServices() {
-      const service = new Service.TemperatureSensor(this.name)
+      const service = new Service.TemperatureSensor(this.type, this.id)
 
       this.platform.characteristics['temperature-' + this.id] = service
         .getCharacteristic(Characteristic.CurrentTemperature)
         .setProps({ minValue: -100 })
 
-      return [service]
+      return [service].concat(super.getServices())
     }
   }
 
@@ -84,7 +100,7 @@ module.exports = function(homebridge) {
 
     accessories(callback) {
       const accessories = [
-        new AlertAlarmSecuritySystem(this, { id: 0 })
+        new AlertAlarmSecuritySystem(this, { id: '0' })
       ]
 
       this.api.get('/system/devices', { refresh: 'false' })

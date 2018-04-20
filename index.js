@@ -1,9 +1,54 @@
 const AlertAlarmApi = require('./api')
+const crypto = require('crypto')
 const packageVersion = require('./package.json').version
 
 module.exports = function(homebridge) {
   const Service = homebridge.hap.Service
   const Characteristic = homebridge.hap.Characteristic
+  const SSCS = Characteristic.SecuritySystemCurrentState
+  const SSTS = Characteristic.SecuritySystemTargetState
+
+  const AlarmStatus = {
+    ARMED_AWAY: 'ARMED_AWAY',
+    ARMED_HOME: 'ARMED_HOME',
+    DISARMED: 'DISARMED',
+
+    fromCurrentState: state => {
+      if (state === SSCS.AWAY_ARM) {
+        return AlarmStatus.ARMED_AWAY
+      } else if (state === SSCS.STAY_ARM) {
+        return AlarmStatus.ARMED_HOME
+      }
+      return AlarmStatus.DISARMED
+    },
+
+    toCurrentState: status => {
+      if (status === AlarmStatus.ARMED_AWAY) {
+        return SSCS.AWAY_ARM
+      } else if (status === AlarmStatus.ARMED_HOME) {
+        return SSCS.STAY_ARM
+      }
+      return SSCS.DISARMED
+    },
+
+    fromTargetState: state => {
+      if (state === SSTS.AWAY_ARM) {
+        return AlarmStatus.ARMED_AWAY
+      } else if (state === SSTS.STAY_ARM) {
+        return AlarmStatus.ARMED_HOME
+      }
+      return AlarmStatus.DISARMED
+    },
+
+    toTargetState: status => {
+      if (status === AlarmStatus.ARMED_AWAY) {
+        return SSTS.AWAY_ARM
+      } else if (status === AlarmStatus.ARMED_HOME) {
+        return SSTS.STAY_ARM
+      }
+      return SSTS.DISARM
+    },
+  }
 
   class AlertAlarmAccessory {
     constructor(platform, device) {
@@ -43,19 +88,27 @@ module.exports = function(homebridge) {
   }
 
   class AlertAlarmSecuritySystem extends AlertAlarmAccessory {
+    constructor(platform, device) {
+      super(platform, device)
+
+      this.currentStatus = AlarmStatus.DISARMED
+    }
+
     get type() {
       return 'Security System'
     }
 
     getServices() {
       const service = new Service.SecuritySystem(this.type)
-      const SSCS = Characteristic.SecuritySystemCurrentState
-      const SSTS = Characteristic.SecuritySystemTargetState
 
       this.platform.characteristics['security-system-current-state'] = service
         .getCharacteristic(SSCS)
         .setProps({
           validValues: [SSCS.STAY_ARM, SSCS.AWAY_ARM, SSCS.DISARMED, SSCS.ALARM_TRIGGERED]
+        })
+        .setValue(AlarmStatus.toCurrentState(this.currentStatus))
+        .on('change', (oldState, newState) => {
+          this.currentStatus = AlarmStatus.fromCurrentState(newState)
         })
 
       this.platform.characteristics['security-system-target-state'] = service
@@ -63,13 +116,57 @@ module.exports = function(homebridge) {
         .setProps({
           validValues: [SSTS.STAY_ARM, SSTS.AWAY_ARM, SSTS.DISARM]
         })
+        .setValue(AlarmStatus.toTargetState(this.currentStatus))
         .on('set', (newState, callback) => {
           // TODO: implement this request
-          service.getCharacteristic(SSCS).setValue(newState)
+
+          const newStatus = AlarmStatus.fromTargetState(newState)
+          this.platform.log('Activation message:', this.createActivationMessage(newStatus))
+
+          service.getCharacteristic(SSCS).setValue(AlarmStatus.toCurrentState(newStatus))
           callback()
         })
 
       return [service].concat(super.getServices())
+    }
+
+    createActivationMessage(newStatus) {
+      const systemUserId = this.platform.config.systemUserId
+      const pinCode = this.platform.config.pinCode
+
+      const status = newStatus !== AlarmStatus.ARMED_AWAY
+        && newStatus !== AlarmStatus.ARMED_HOME
+        ? 0 : 1
+      const group = newStatus === AlarmStatus.ARMED_HOME
+        || this.currentStatus === AlarmStatus.ARMED_HOME
+        ? 1 : 0
+      const now = new Date()
+
+      const data = [
+        '2', // version
+        status,
+        group,
+        now.getFullYear().toString().substr(-2),
+        now.getMonth().toString(16),
+        ('00' + now.getDate()).substr(-2),
+        ('00' + now.getHours()).substr(-2),
+        ('00' + now.getMinutes()).substr(-2),
+        ('00' + systemUserId.toString(16)).substr(-2)
+      ].join('')
+
+      const paddedData = (data + '0000000000000000').substring(0, 16)
+
+      const key = Buffer.from('000000000000' + pinCode, 'utf8')
+      const iv = crypto.randomBytes(16)
+      const cipher = crypto.createCipheriv('aes-128-cbc', key, iv)
+      cipher.setAutoPadding(false)
+
+      const encrypted = Buffer.concat([
+        cipher.update(paddedData, 'utf8'),
+        cipher.final()
+      ])
+
+      return iv.toString('hex') + encrypted.toString('hex')
     }
   }
 
@@ -157,14 +254,19 @@ module.exports = function(homebridge) {
         }
 
         if (event.log_type === 'activation') {
-          const SSCS = Characteristic.SecuritySystemCurrentState
-          const SSTS = Characteristic.SecuritySystemTargetState
-          const state = event.data.active_group_id
+          const activeGroupId = event.data.active_group_id
 
-          setValue('security-system-target-state', state >= 0 ? SSTS.AWAY_ARM : SSTS.DISARM)
+          let status = AlarmStatus.DISARMED
+          if (activeGroupId === 0) {
+            status = AlarmStatus.ARMED_AWAY
+          } else if (activeGroupId > 0) {
+            status = AlarmStatus.ARMED_HOME
+          }
+
+          setValue('security-system-target-state', AlarmStatus.toTargetState(status))
 
           if (event.data.activation_progress === 0) {
-            setValue('security-system-current-state', state >= 0 ? SSCS.AWAY_ARM : SSCS.DISARMED)
+            setValue('security-system-current-state', AlarmStatus.toCurrentState(status))
           }
         } else if (event.log_type === 'temperature') {
           setValue('temperature-' + event.data.radio_code, event.data.degrees_celsius)

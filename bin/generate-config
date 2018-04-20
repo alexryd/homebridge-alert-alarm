@@ -4,6 +4,9 @@ const AlertAlarmApi = require('../api')
 const colors = require('colors/safe')
 const NodeRSA = require('node-rsa')
 const prompt = require('prompt')
+const PushReceiver = require('push-receiver')
+
+const GCM_SENDER_ID = '162191237030'
 
 const api = new AlertAlarmApi()
 
@@ -163,6 +166,35 @@ const promptForPinCode = settings => {
   })
 }
 
+const registerToGCM = settings => {
+  console.log('Registering to GCM...')
+
+  return PushReceiver.register(GCM_SENDER_ID)
+    .then(credentials => {
+      console.log(colors.green('Successfully registered to GCM'))
+
+      settings.pushReceiverCredentials = credentials
+
+      return settings
+    })
+}
+
+const registerForNotifications = settings => {
+  console.log('Registering for notifications...')
+
+  return api.post('/notifications')
+    .type('form')
+    .send({
+      notification_types: 'alarm,activation,temperature',
+      os: 'android',
+      token: settings.pushReceiverCredentials.gcm.token,
+    })
+    .then(res => {
+      console.log(colors.green('Registered for notifications'))
+      return settings
+    })
+}
+
 const outputConfig = settings => {
   const config = {
     platform: "AlertAlarm",
@@ -174,6 +206,7 @@ const outputConfig = settings => {
     msisdn: settings.msisdn,
     pinCode: settings.pinCode,
     privateKey: settings.privateKey,
+    pushReceiverCredentials: settings.pushReceiverCredentials,
   }
 
   console.log('')
@@ -190,6 +223,8 @@ promptForSystemIdAndPhoneNumber({})
   .then(verify)
   .then(loadSystemInfo)
   .then(promptForPinCode)
+  .then(registerToGCM)
+  .then(registerForNotifications)
   .then(outputConfig)
   .catch(err => {
     console.error(colors.red('An error occurred'), err)

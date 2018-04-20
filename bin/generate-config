@@ -111,6 +111,28 @@ const verify = settings => {
       settings.publicKey = key.exportKey('public')
       settings.privateKey = key.exportKey('private')
 
+      api.config = {
+        systemId: settings.systemId,
+        clientId: settings.clientId,
+        privateKey: settings.privateKey,
+      }
+
+      return settings
+    })
+}
+
+const loadSystemInfo = settings => {
+  console.log('Loading system info...')
+
+  return api.get('/system/info')
+    .then(res => {
+      console.log(colors.green('System info loaded'))
+
+      const data = res.body.data
+
+      settings.msisdn = data.msisdn
+      settings.systemUserId = data.system_user_id
+
       return settings
     })
 }
@@ -122,6 +144,8 @@ const outputConfig = settings => {
     refreshInterval: 10 * 60 * 1000,
     systemId: settings.systemId,
     clientId: settings.clientId,
+    systemUserId: settings.systemUserId,
+    msisdn: settings.msisdn,
     privateKey: settings.privateKey,
   }
 
@@ -137,6 +161,7 @@ promptForSystemIdAndPhoneNumber({})
   .then(authenticate)
   .then(promptForCode)
   .then(verify)
+  .then(loadSystemInfo)
   .then(outputConfig)
   .catch(err => {
     console.error(colors.red('An error occurred'), err)

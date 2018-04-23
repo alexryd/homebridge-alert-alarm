@@ -1,7 +1,6 @@
 const AlertAlarmApi = require('./api')
 const crypto = require('crypto')
 const packageVersion = require('./package.json').version
-const PushReceiver = require('push-receiver')
 
 module.exports = function(homebridge) {
   const Service = homebridge.hap.Service
@@ -194,14 +193,6 @@ module.exports = function(homebridge) {
       this.api = new AlertAlarmApi(config)
       this.lastSeenEventId = 0
       this.characteristics = {}
-
-      PushReceiver.listen(
-        config.pushReceiverCredentials,
-        ({ notification, persistentId }) => {
-          // TODO: reload the event log
-          this.log('Received notification:', notification)
-        }
-      )
     }
 
     accessories(callback) {

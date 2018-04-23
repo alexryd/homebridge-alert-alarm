@@ -25,7 +25,6 @@
     "jsonwebtoken": "^8.2.1",
     "node-rsa": "^0.4.2",
     "prompt": "^1.0.0",
-    "push-receiver": "^2.0.0",
     "superagent": "^3.8.2"
   }
 }

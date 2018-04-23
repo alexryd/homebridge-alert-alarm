@@ -131,19 +131,29 @@ module.exports = function(homebridge) {
     }
 
     createActivationMessage(newStatus) {
+      const version = this.platform.config.smsV2Support ? 2 : 1
       const systemUserId = this.platform.config.systemUserId
       const pinCode = this.platform.config.pinCode
 
-      const status = newStatus !== AlarmStatus.ARMED_AWAY
-        && newStatus !== AlarmStatus.ARMED_HOME
-        ? 0 : 1
+      const status = newStatus === AlarmStatus.ARMED_AWAY
+        || newStatus === AlarmStatus.ARMED_HOME
+        ? 1 : 0
       const group = newStatus === AlarmStatus.ARMED_HOME
-        || this.currentStatus === AlarmStatus.ARMED_HOME
+        || (newStatus === AlarmStatus.DISARMED && this.currentStatus === AlarmStatus.ARMED_HOME)
         ? 1 : 0
       const now = new Date()
 
+      let user = ''
+      if (version >= 2) {
+        if (systemUserId > 0) {
+          user = ('00' + systemUserId.toString(16)).substr(-2)
+        } else {
+          user = 'FF'
+        }
+      }
+
       const data = [
-        '2', // version
+        version,
         status,
         group,
         now.getFullYear().toString().substr(-2),
@@ -151,8 +161,8 @@ module.exports = function(homebridge) {
         ('00' + now.getDate()).substr(-2),
         ('00' + now.getHours()).substr(-2),
         ('00' + now.getMinutes()).substr(-2),
-        ('00' + systemUserId.toString(16)).substr(-2)
-      ].join('')
+        user,
+      ].join('').toUpperCase()
 
       const paddedData = (data + '0000000000000000').substring(0, 16)
 

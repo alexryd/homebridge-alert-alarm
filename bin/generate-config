@@ -132,6 +132,7 @@ const loadSystemInfo = settings => {
 
       settings.msisdn = data.msisdn
       settings.systemUserId = data.system_user_id
+      settings.smsV2Support = data.features.sms_v2
 
       return settings
     })
@@ -172,6 +173,7 @@ const outputConfig = settings => {
     clientId: settings.clientId,
     systemUserId: settings.systemUserId,
     msisdn: settings.msisdn,
+    smsV2Support: settings.smsV2Support,
     pinCode: settings.pinCode,
     privateKey: settings.privateKey,
   }

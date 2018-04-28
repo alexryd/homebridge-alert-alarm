@@ -202,6 +202,7 @@ module.exports = function(homebridge) {
       this.config = config
       this.api = new AlertAlarmApi(config)
       this.lastSeenEventId = 0
+      this.loadEventLogTimeout = null
       this.characteristics = {}
     }
 
@@ -229,6 +230,11 @@ module.exports = function(homebridge) {
     }
 
     loadEventLog() {
+      if (this.loadEventLogTimeout !== null) {
+        clearTimeout(this.loadEventLogTimeout)
+        this.loadEventLogTimeout = null
+      }
+
       this.api.get('/log/recent', { count: 1000, since_id: this.lastSeenEventId })
         .then(res => {
           this.updateCharacteristics(res.body.data)
@@ -237,7 +243,12 @@ module.exports = function(homebridge) {
           this.log('Failed to load the event log:', err)
         })
         .then(() => {
-          setTimeout(
+          if (this.loadEventLogTimeout !== null) {
+            clearTimeout(this.loadEventLogTimeout)
+            this.loadEventLogTimeout = null
+          }
+
+          this.loadEventLogTimeout = setTimeout(
             this.loadEventLog.bind(this),
             this.config.refreshInterval || 10 * 60 * 1000
           )

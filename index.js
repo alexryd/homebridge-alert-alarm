@@ -202,6 +202,7 @@ module.exports = function(homebridge) {
       this.config = config
       this.api = new AlertAlarmApi(config)
       this.lastSeenEventId = 0
+      this.lastSeenETag = null
       this.loadEventLogTimeout = null
       this.characteristics = {}
     }
@@ -236,12 +237,16 @@ module.exports = function(homebridge) {
       }
 
       this.api.get('/log/recent', { count: 1000, since_id: this.lastSeenEventId })
+        .set('If-None-Match', this.lastSeenETag)
         .then(res => {
+          this.lastSeenETag = res.headers.etag || null
           this.updateCharacteristics(res.body.data)
         })
         .catch(err => {
           if (err && err.response) {
-            this.log('Failed to load the event log:', err.status, err.message)
+            if (err.status !== 304) {
+              this.log('Failed to load the event log:', err.status, err.message)
+            }
           } else {
             this.log('An error occurred when loading the event log:', err)
           }

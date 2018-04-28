@@ -213,6 +213,7 @@ module.exports = function(homebridge) {
       ]
 
       this.api.get('/system/devices', { refresh: 'false' })
+        .retry(2)
         .then(res => {
           for (let device of res.body.data) {
             if (device.temperature_measurements) {
@@ -238,6 +239,7 @@ module.exports = function(homebridge) {
 
       this.api.get('/log/recent', { count: 1000, since_id: this.lastSeenEventId })
         .set('If-None-Match', this.lastSeenETag)
+        .retry(2)
         .then(res => {
           this.lastSeenETag = res.headers.etag || null
           this.updateCharacteristics(res.body.data)

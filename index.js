@@ -243,6 +243,7 @@ module.exports = function(homebridge) {
         .then(res => {
           this.lastSeenETag = res.headers.etag || null
           this.updateCharacteristics(res.body.data)
+          this.log('Updates loaded')
         })
         .catch(err => {
           if (err && err.response) {

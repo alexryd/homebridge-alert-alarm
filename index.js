@@ -240,7 +240,11 @@ module.exports = function(homebridge) {
           this.updateCharacteristics(res.body.data)
         })
         .catch(err => {
-          this.log('Failed to load the event log:', err)
+          if (err && err.response) {
+            this.log('Failed to load the event log:', err.status, err.message)
+          } else {
+            this.log('An error occurred when loading the event log:', err)
+          }
         })
         .then(() => {
           if (this.loadEventLogTimeout !== null) {

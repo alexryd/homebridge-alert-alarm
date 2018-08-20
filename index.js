@@ -1,5 +1,6 @@
 const AlertAlarmApi = require('./api')
 const crypto = require('crypto')
+const fs = require('fs')
 const packageVersion = require('./package.json').version
 
 module.exports = function(homebridge) {
@@ -243,6 +244,7 @@ module.exports = function(homebridge) {
         .then(res => {
           this.lastSeenETag = res.headers.etag || null
           this.updateCharacteristics(res.body.data)
+          this.updateStatusFile()
           this.log('Updates loaded')
         })
         .catch(err => {
@@ -305,6 +307,31 @@ module.exports = function(homebridge) {
           setValue('temperature-' + event.data.radio_code, event.data.degrees_celsius)
         }
       }
+    }
+
+    updateStatusFile() {
+      if (!this.options.statusFile) {
+        return
+      }
+
+      const lines = []
+
+      for (const c in this.characteristics) {
+        if (c === 'security-system-current-state') {
+          const state = this.characteristics[c].value
+          lines.push(`activation state=${state}`)
+        } else if (c.substr(0, 12) === 'temperature-') {
+          const radioCode = c.substr(12)
+          const temperature = this.characteristics[c].value
+          lines.push(`temperature,sensor=${radioCode} value=${temperature}`)
+        }
+      }
+
+      fs.writeFileSync(
+        this.options.statusFilePath
+          || '/tmp/homebridge-alert-alarm-status.influx',
+        lines.join('\n')
+        )
     }
   }
 

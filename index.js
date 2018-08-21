@@ -310,7 +310,7 @@ module.exports = function(homebridge) {
     }
 
     updateStatusFile() {
-      if (!this.options.statusFile) {
+      if (!this.config.statusFile) {
         return
       }
 
@@ -328,7 +328,7 @@ module.exports = function(homebridge) {
       }
 
       fs.writeFileSync(
-        this.options.statusFilePath
+        this.config.statusFilePath
           || '/tmp/homebridge-alert-alarm-status.influx',
         lines.join('\n')
         )

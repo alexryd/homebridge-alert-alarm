@@ -318,8 +318,8 @@ module.exports = function(homebridge) {
 
       for (const c in this.characteristics) {
         if (c === 'security-system-current-state') {
-          const state = this.characteristics[c].value
-          lines.push(`activation state=${state}`)
+          const state = AlarmStatus.fromCurrentState(this.characteristics[c].value)
+          lines.push(`activation state="${state}"`)
         } else if (c.substr(0, 12) === 'temperature-') {
           const radioCode = c.substr(12)
           const temperature = this.characteristics[c].value

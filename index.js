@@ -1,6 +1,7 @@
 const AlertAlarmApi = require('./api')
 const crypto = require('crypto')
 const fs = require('fs')
+const os = require('os')
 const packageVersion = require('./package.json').version
 
 module.exports = function(homebridge) {
@@ -330,7 +331,7 @@ module.exports = function(homebridge) {
       fs.writeFileSync(
         this.config.statusFilePath
           || '/tmp/homebridge-alert-alarm-status.influx',
-        lines.join('\n')
+        lines.join(os.EOL) + os.EOL
         )
     }
   }
